@@ -27,6 +27,19 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 try:
     import pyslang  # flat namespace — everything lives under pyslang.*
+    # triad fix (2026-10-20): newer pyslang (e.g. 12) keeps SyntaxTree, Compilation, the *Symbol / *Expression
+    # classes, VisitAction, ... in submodules (pyslang.syntax, pyslang.ast, ...), so `pyslang.SyntaxTree` raised and
+    # every design fell back to the regex chunker. A module-local namespace restores the flat names; the pyslang
+    # package itself is not changed.
+    if not hasattr(pyslang, "SyntaxTree"):
+        import types as _types
+
+        _flat = _types.SimpleNamespace(**{n: getattr(pyslang, n) for n in dir(pyslang) if not n.startswith("_")})
+        for _sub in ("syntax", "ast", "parsing", "text", "diagnostics", "analysis", "driver", "numeric", "util"):
+            for _n in dir(getattr(pyslang, _sub, None) or object()):
+                if not _n.startswith("_") and not hasattr(_flat, _n):
+                    setattr(_flat, _n, getattr(getattr(pyslang, _sub), _n))
+        pyslang = _flat  # type: ignore[assignment]
     _PYSLANG_AVAILABLE = True
 except ImportError:  # pragma: no cover
     pyslang = None  # type: ignore[assignment]
