@@ -603,11 +603,16 @@ class SVAAgent:
             TOOL_CALL: {"tool": "tool_name", "args": {...}}
         """
         calls = []
-        # Match TOOL_CALL: {...} lines
-        for match in re.finditer(r'TOOL_CALL:\s*(\{.*?\})', content, re.DOTALL):
+        # triad fix (2026-10-20): decode the JSON object after each TOOL_CALL: marker. The former non-greedy regex
+        # (TOOL_CALL:\s*(\{.*?\})) stopped at the first "}", so every call with "args" failed to parse.
+        decoder = json.JSONDecoder()
+        for match in re.finditer(r'TOOL_CALL:\s*', content):
+            start = match.end()
+            if not content.startswith("{", start):
+                continue
             try:
-                parsed = json.loads(match.group(1))
-                if "tool" in parsed:
+                parsed, _ = decoder.raw_decode(content, start)
+                if isinstance(parsed, dict) and "tool" in parsed:
                     calls.append(parsed)
             except Exception:
                 pass
